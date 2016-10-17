@@ -1,6 +1,7 @@
 input: "data"
 input_shape{dim: 400 dim: 1 dim: 33  dim: 33 dim: 33}
 
+
 layer {
   name: "conv_7"
   type: "Convolution"
@@ -38,12 +39,16 @@ layer {
 }
 
 layer {
-    name: "pool_1"
-    type: "Pooling"
-    bottom: "conv_7"
-    top: "pool_1"
+  name: "pool_1"
+  type: "Pooling"
+  bottom: "conv_7"
+  top: "pool_1"
+  pooling_param {
+    pool: MAX
+    kernel_size: 3
+    stride: 2
+  }
 }
-
 
 layer {
   name: "conv_5"
@@ -191,16 +196,6 @@ layer {
 }
 
 layer {
-  name: "drop1"
-  type: "Dropout"
-  bottom: "fc1"
-  top: "fc1"
-  dropout_param {
-    dropout_ratio: 0.5
-  }
-}
-
-layer {
   name: "fc2"
   type: "InnerProduct"
   bottom: "fc1"
@@ -234,13 +229,10 @@ layer {
 }
 
 layer {
-  name: "drop2"
-  type: "Dropout"
+  name: "split1_1"
+  type: "Split"
   bottom: "fc2"
-  top: "fc2"
-  dropout_param {
-    dropout_ratio: 0.5
-  }
+  top: "fc2_out"
 }
 
 layer {
