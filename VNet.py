@@ -252,7 +252,9 @@ class VNet(object):
         # todo: Knn search via flann or similar
         neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distance = self.knn_search(results_feature)
 
-        dst_votes = np.tile(coords, (1, self.params['ModelParams']['numNeighs'])) + votes
+        dst_votes = np.tile(coords, (self.params['ModelParams']['numNeighs'], 1)) + votes
+        # todo check if the votes are [Nsamples; Nsamples; Nsample ...] or [S1 S1 S1 S1, S2 S2 S2 S2, S3 S3 S3 S3...]
+        # todo and if the coords follow the same convention after tiling...
 
         for i in range(0, self.params['ModelParams']['numNeighs']):
             curr_votes = dst_votes[:, i * 3:(i + 1) * 3]
