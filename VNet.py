@@ -252,39 +252,42 @@ class VNet(object):
         # todo: Knn search via flann or similar
         neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distance = self.knn_search(results_feature)
 
-        dst_votes = np.tile(coords, (self.params['ModelParams']['numNeighs'], 1)) + votes
+        coords = np.tile(coords, (self.params['ModelParams']['numNeighs'], 1))
+        dst_votes = coords + votes
         # todo check if the votes are [Nsamples; Nsamples; Nsample ...] or [S1 S1 S1 S1, S2 S2 S2 S2, S3 S3 S3 S3...]
         # todo and if the coords follow the same convention after tiling...
 
-        votemap[dst_votes[0], dst_votes[1], dst_votes[2]] += 1.0 / (distance + 1.0)
+        dst_votes = dst_votes.astype(dtype=int)
 
-        xc, yc, zc = np.argmax(votemap)
+        votemap[dst_votes[:, 0], dst_votes[:, 1], dst_votes[:, 2]] += np.ones_like(distance) / (distance + 1.0)
+
+        print votemap.shape
+        max_loc = np.argmax(votemap)
+        xc, yc, zc = np.unravel_index(max_loc, votemap.shape)
 
         h_seg_patch_size = int(self.params['ModelParams']['SegPatchSize'] / 2)
 
-        for i in range(0, self.params['ModelParams']['numNeighs']):
-            curr_votes = dst_votes[:, i * 3:(i + 1) * 3]
-            reject_votes = abs(curr_votes - np.asarray([xc, yc, zc])) < self.params['ModelParams']['centrtol']
-            w = 1.0 / (distance[i] + 1.0)
+        reject_votes = abs(dst_votes - np.asarray([xc, yc, zc])) < self.params['ModelParams']['centrtol']
+        w = np.ones_like(distance) / (distance + 1.0)
 
-            curr_dst_coords = coords[reject_votes]
-            curr_seg_patch_coords = seg_patch_coords[reject_votes]
-            curr_seg_patch_vol = seg_patch_vol[reject_votes]
-            curr_weight = w[reject_votes]
+        curr_dst_coords = coords[reject_votes]
+        curr_seg_patch_coords = seg_patch_coords[reject_votes]
+        curr_seg_patch_vol = seg_patch_vol[reject_votes]
+        curr_weight = w[reject_votes]
 
-            patches = self.retrieve_seg_patches(curr_seg_patch_coords, curr_seg_patch_vol, numpyGT)
-            #patches has size [n_seg_patches, h, w, d]
+        patches = self.retrieve_seg_patches(curr_seg_patch_coords, curr_seg_patch_vol, numpyGT)
+        #patches has size [n_seg_patches, h, w, d]
 
-            #apply patches in appropriate places
+        #apply patches in appropriate places
 
-            for p, c, w in zip(patches, curr_dst_coords, curr_weight):
-                segmentation[c[0] - h_seg_patch_size - 1:c[0] + h_seg_patch_size,
-                             c[1] - h_seg_patch_size - 1:c[1] + h_seg_patch_size,
-                             c[2] - h_seg_patch_size - 1:c[2] + h_seg_patch_size] += p * w
+        for p, c, w in zip(patches, curr_dst_coords, curr_weight):
+            segmentation[c[0] - h_seg_patch_size - 1:c[0] + h_seg_patch_size,
+                         c[1] - h_seg_patch_size - 1:c[1] + h_seg_patch_size,
+                         c[2] - h_seg_patch_size - 1:c[2] + h_seg_patch_size] += p * w
 
-                denominator[c[0] - h_seg_patch_size - 1:c[0] + h_seg_patch_size,
-                            c[1] - h_seg_patch_size - 1:c[1] + h_seg_patch_size,
-                            c[2] - h_seg_patch_size - 1:c[2] + h_seg_patch_size] += w
+            denominator[c[0] - h_seg_patch_size - 1:c[0] + h_seg_patch_size,
+                        c[1] - h_seg_patch_size - 1:c[1] + h_seg_patch_size,
+                        c[2] - h_seg_patch_size - 1:c[2] + h_seg_patch_size] += w
 
         segmentation /= (denominator+EPS)
 
@@ -346,11 +349,11 @@ class VNet(object):
             zz = zz.flatten()
 
             centroid = np.zeros((1, 3), dtype=np.float32)
-            centroid[0, 0] = np.mean(xx[annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0])
-            centroid[0, 1] = np.mean(yy[annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0])
-            centroid[0, 2] = np.mean(zz[annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0])
+            centroid[0, 0] = np.mean(xx * annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0)
+            centroid[0, 1] = np.mean(yy * annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0)
+            centroid[0, 2] = np.mean(zz * annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0)
 
-            valid = annotation[coords[0, 0], coords[0, 1], coords[0, 2]] > 0
+            valid = annotation[coords[:, 0], coords[:, 1], coords[:, 2]] > 0
 
             results_feature = results_feature[valid, :]
             coords = coords[valid, :]
