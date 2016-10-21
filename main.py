@@ -30,7 +30,7 @@ params['ModelParams']['SamplingStep'] = 8
 params['ModelParams']['featLength'] = 128
 params['ModelParams']['numNeighs'] = 10
 params['ModelParams']['centrtol'] = 5
-
+params['ModelParams']['SegPatchRadius'] = [7, 7, 7]
 
 #params of the DataManager
 params['DataManagerParams']['dstRes'] = np.asarray([1, 1, 1.5], dtype=float)

@@ -233,7 +233,7 @@ class VNet(object):
 
         return results_label.astype(dtype=int), results_probability, results_feature, np.vstack((xx, yy, zz)).T
 
-    def cast_votes_and_segment(self, results_label, results_probability, results_feature, coords):
+    def cast_votes_and_segment(self, results_label, results_probability, results_feature, coords, numpyGT):
         votemap = np.zeros((self.params['DataManagerParams']['VolSize'][0],
                   self.params['DataManagerParams']['VolSize'][1],
                   self.params['DataManagerParams']['VolSize'][2]), dtype=np.float32)
@@ -272,7 +272,8 @@ class VNet(object):
             curr_seg_patch_vol = seg_patch_vol[reject_votes]
             curr_weight = w[reject_votes]
 
-            patches = self.retrieve_seg_patches(curr_seg_patch_coords, curr_seg_patch_vol)
+            patches = self.retrieve_seg_patches(curr_seg_patch_coords, curr_seg_patch_vol, numpyGT)
+            #patches has size [n_seg_patches, h, w, d]
 
             #apply patches in appropriate places
 
@@ -289,6 +290,25 @@ class VNet(object):
 
         return votemap, segmentation
 
+    def retrieve_seg_patches(self, curr_seg_patch_coords, curr_seg_patch_vol, numpyGT):
+        patches = np.zeros((curr_seg_patch_coords.shape[0],
+                  self.params['ModelParams']['SegPatchRadius'][0] * 2 + 1,
+                  self.params['ModelParams']['SegPatchRadius'][1] * 2 + 1,
+                  self.params['ModelParams']['SegPatchRadius'][2] * 2 + 1), dtype=np.float32)
+        idx = 0
+        for coord, vol in zip(curr_seg_patch_coords, curr_seg_patch_vol):
+            patches[idx] = numpyGT[vol][
+                        coord[0] - self.params['ModelParams']['SegPatchRadius'][0]:
+                        coord[0] + self.params['ModelParams']['SegPatchRadius'][0],
+                        coord[1] - self.params['ModelParams']['SegPatchRadius'][1]:
+                        coord[1] + self.params['ModelParams']['SegPatchRadius'][1],
+                        coord[2] - self.params['ModelParams']['SegPatchRadius'][2]:
+                        coord[2] + self.params['ModelParams']['SegPatchRadius'][2]
+                        ]
+            idx += 1
+
+        return patches
+
     def knn_search(self, result_feature):
         distances, indices = self.database.kneighbors(result_feature)
 
@@ -300,13 +320,12 @@ class VNet(object):
 
         return neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distances
 
-
     def create_database(self, net, volumes, annotations):
         #todo save pkl database file of features and coordinates
 
         self.featDB = np.empty((0, self.params['ModelParams']['featLength']), dtype=np.float32)
         self.coordsDB = np.empty((0, 3), dtype=np.float32)
-        self.volIdxDB = np.empty((0, 1), dtype=np.float32)
+        self.volIdxDB = np.empty((0, 1), dtype=object)
         self.votesDB = np.empty((0, 3), dtype=np.float32)
 
         volIdx = 0
@@ -341,7 +360,8 @@ class VNet(object):
             self.featDB = np.vstack((self.featDB, results_feature))
             self.coordsDB = np.vstack((self.coordsDB, coords))
             self.volIdxDB = np.vstack((self.volIdxDB,
-                                       np.ones((results_feature.shape[0], 1), dtype=np.float32) * volIdx))
+                                       np.reshape(np.asarray(results_feature.shape[0] * [annotationK], dtype=object),
+                                                  (-1, 1))))
             self.votesDB = np.vstack((self.votesDB, votes))
 
             volIdx += 1
@@ -375,23 +395,23 @@ class VNet(object):
         for key in numpyImages:
             mean = np.mean(numpyImages[key][numpyImages[key]>0])
             std = np.std(numpyImages[key][numpyImages[key]>0])
-
             numpyImages[key] -= mean
             numpyImages[key] /= std
 
+
+        self.dataManagerTrain = DM.DataManager(self.params['ModelParams']['dirTrain'],
+                                               self.params['ModelParams']['dirResult'],
+                                               self.params['DataManagerParams'])
+
+        self.dataManagerTrain.loadTrainingData()  # loads in sitk format
+
+        numpyGT = self.dataManagerTrain.getNumpyGT() # GT of the training set, needed in memory to do segmentation
+
         if self.params['DataManagerParams']['databasePklLoadPath'] is None:
-            self.dataManagerTrain = DM.DataManager(self.params['ModelParams']['dirTrain'],
-                                                   self.params['ModelParams']['dirResult'],
-                                                   self.params['DataManagerParams'])
-            self.dataManagerTrain.loadTrainingData()  # loads in sitk format
-
             numpyImagesTrain = self.dataManagerTrain.getNumpyImages()
-            numpyGT = self.dataManagerTrain.getNumpyGT()
-
-            for key in numpyImages:
+            for key in numpyImagesTrain:
                 mean = np.mean(numpyImagesTrain[key][numpyImagesTrain[key] > 0])
                 std = np.std(numpyImagesTrain[key][numpyImagesTrain[key] > 0])
-
                 numpyImagesTrain[key] -= mean
                 numpyImagesTrain[key] /= std
 
@@ -402,9 +422,11 @@ class VNet(object):
         results = dict()
 
         for key in numpyImages:
-            results_label, results_probability, results_feature, coords = self.get_class_and_feature_volume(net, numpyImages[key])
+            results_label, results_probability, results_feature, coords = \
+                self.get_class_and_feature_volume(net, numpyImages[key])
 
-            votemap, segmentation = self.cast_votes_and_segment(results_label, results_probability, results_feature, coords)
+            votemap, segmentation = self.cast_votes_and_segment(results_label, results_probability,
+                                                                results_feature, coords, numpyGT)
 
             print(segmentation.shape)
             print('done {}'.format(key))
