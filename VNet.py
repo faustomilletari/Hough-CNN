@@ -5,8 +5,11 @@ import matplotlib
 import os
 import DataManager as DM
 import utilities
+import cPickle as pkl
 from os.path import splitext
 from multiprocessing import Process, Queue
+from sklearn.neighbors import NearestNeighbors
+
 
 EPS = 0.0000000001
 
@@ -221,15 +224,14 @@ class VNet(object):
             out = net.forward()
             print out.keys()
             l = np.argmax(out["pred"], axis=1)
-            p = out["pred"][:, l]
+            p = np.max(out["pred"], axis=1)
             f = out["fc2_out"]
-
 
             results_label[i * batchsize:(i + 1) * batchsize] = l
             results_feature[i * batchsize:(i + 1) * batchsize] = f
             results_probability[i * batchsize:(i + 1) * batchsize] = p
 
-        return int(results_label), results_probability, results_feature, (xx, yy, zz)
+        return results_label.astype(dtype=int), results_probability, results_feature, np.vstack((xx, yy, zz)).T
 
     def cast_votes_and_segment(self, results_label, results_probability, results_feature, coords):
         votemap = np.zeros((self.params['DataManagerParams']['VolSize'][0],
@@ -248,7 +250,7 @@ class VNet(object):
         coords = coords[results_label > 0]
 
         # todo: Knn search via flann or similar
-        neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distance = self.k_nn_search(results_feature)
+        neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distance = self.knn_search(results_feature)
 
         dst_votes = np.tile(coords, (0, self.params['DataManagerParams']['numNeighs'])) + votes
 
@@ -287,13 +289,73 @@ class VNet(object):
 
         return votemap, segmentation
 
-    def create_database(self):
+    def knn_search(self, result_feature):
+        distances, indices = self.database.kneighbors(result_feature)
+
+        neighbors_idx = indices.flatten()
+        seg_patch_coords = self.coordsDB[neighbors_idx]
+        seg_patch_vol = self.volIdxDB[neighbors_idx]
+        votes = self.votesDB[neighbors_idx]
+        distances = distances.flatten()
+
+        return neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distances
+
+
+    def create_database(self, net, volumes, annotations):
         #todo save pkl database file of features and coordinates
-        print('todo')
+
+        self.featDB = np.empty((0, self.params['ModelParams']['featLength']), dtype=np.float32)
+        self.coordsDB = np.empty((0, 3), dtype=np.float32)
+        self.volIdxDB = np.empty((0, 1), dtype=np.float32)
+        self.votesDB = np.empty((0, 3), dtype=np.float32)
+
+        volIdx = 0
+        for volumeK, annotationK in zip(volumes, annotations):
+            volume = volumes[volumeK]
+            annotation = annotations[annotationK]
+
+            _, _, results_feature, coords = \
+                self.get_class_and_feature_volume(net, volume)
+
+            x = np.linspace(0, 1, annotation.shape[0])
+            y = np.linspace(0, 1, annotation.shape[1])
+            z = np.linspace(0, 1, annotation.shape[2])
+
+            xx, yy, zz = np.meshgrid(x, y, z)
+
+            xx = xx.flatten()
+            yy = yy.flatten()
+            zz = zz.flatten()
+
+            centroid = np.zeros((1, 3), dtype=np.float32)
+            centroid[0, 0] = np.mean(xx[annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0])
+            centroid[0, 1] = np.mean(yy[annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0])
+            centroid[0, 2] = np.mean(zz[annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0])
+
+            valid = annotation[coords[0, 0], coords[0, 1], coords[0, 2]] > 0
+
+            results_feature = results_feature[valid, :]
+            coords = coords[valid, :]
+            votes = centroid - coords
+
+            self.featDB = np.vstack((self.featDB, results_feature))
+            self.coordsDB = np.vstack((self.coordsDB, coords))
+            self.volIdxDB = np.vstack((self.volIdxDB,
+                                       np.ones((results_feature.shape[0], 1), dtype=np.float32) * volIdx))
+            self.votesDB = np.vstack((self.votesDB, votes))
+
+            volIdx += 1
+            # create scikit database for NN.
+        self.database = NearestNeighbors(n_neighbors=self.params['ModelParams']['numNeighs'],
+                                         algorithm='ball_tree').fit(self.featDB)
+
+        with open(self.params['DataManagerParams']['databasePklSavePath'], 'wb') as f:
+            pkl.dump((self.database, self.coordsDB, self.volIdxDB, self.featDB, self.votesDB), f)
+
 
     def load_database(self):
-        #todo load PKL database file
-        print('todo')
+        with open(self.params['DataManagerParams']['databasePklLoadPath'], 'rb') as f:
+            self.database, self.coordsDB, self.volIdxDB, self.featDB, self.votesDB = pkl.load(f)
 
     def test(self):
         assert self.params['DataManagerParams']['VolSize'][0] == \
@@ -303,17 +365,39 @@ class VNet(object):
         self.dataManagerTest = DM.DataManager(self.params['ModelParams']['dirTest'], self.params['ModelParams']['dirResult'], self.params['DataManagerParams'])
         self.dataManagerTest.loadTestData()
 
+
         net = caffe.Net(self.params['ModelParams']['prototxtTest'],
                         os.path.join(self.params['ModelParams']['dirSnapshots'],"_iter_" + str(self.params['ModelParams']['snapshot']) + ".caffemodel"),
                         caffe.TEST)
 
         numpyImages = self.dataManagerTest.getNumpyImages()
+
         for key in numpyImages:
             mean = np.mean(numpyImages[key][numpyImages[key]>0])
             std = np.std(numpyImages[key][numpyImages[key]>0])
 
             numpyImages[key] -= mean
             numpyImages[key] /= std
+
+        if self.params['DataManagerParams']['databasePklLoadPath'] is None:
+            self.dataManagerTrain = DM.DataManager(self.params['ModelParams']['dirTrain'],
+                                                   self.params['ModelParams']['dirResult'],
+                                                   self.params['DataManagerParams'])
+            self.dataManagerTrain.loadTrainingData()  # loads in sitk format
+
+            numpyImagesTrain = self.dataManagerTrain.getNumpyImages()
+            numpyGT = self.dataManagerTrain.getNumpyGT()
+
+            for key in numpyImages:
+                mean = np.mean(numpyImagesTrain[key][numpyImagesTrain[key] > 0])
+                std = np.std(numpyImagesTrain[key][numpyImagesTrain[key] > 0])
+
+                numpyImagesTrain[key] -= mean
+                numpyImagesTrain[key] /= std
+
+            self.create_database(net, numpyImagesTrain, numpyGT)
+        else:
+            self.load_database()
 
         results = dict()
 

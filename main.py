@@ -28,12 +28,15 @@ params['ModelParams']['solver'] = None
 params['ModelParams']['patchSize'] = 33
 params['ModelParams']['SamplingStep'] = 8
 params['ModelParams']['featLength'] = 128
+params['ModelParams']['numNeighs'] = 10
 
 
 #params of the DataManager
 params['DataManagerParams']['dstRes'] = np.asarray([1, 1, 1.5], dtype=float)
 params['DataManagerParams']['VolSize'] = np.asarray([116, 116, 116], dtype=int)
 params['DataManagerParams']['normDir'] = False
+params['DataManagerParams']['databasePklLoadPath'] = None
+params['DataManagerParams']['databasePklSavePath'] = './database.pkl'
 
 model=VN.VNet(params)
 train = [i for i, j in enumerate(sys.argv) if j == '-train']
