@@ -252,7 +252,7 @@ class VNet(object):
         # todo: Knn search via flann or similar
         neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distance = self.knn_search(results_feature)
 
-        dst_votes = np.tile(coords, (0, self.params['ModelParams']['numNeighs'])) + votes
+        dst_votes = np.tile(coords, (1, self.params['ModelParams']['numNeighs'])) + votes
 
         for i in range(0, self.params['ModelParams']['numNeighs']):
             curr_votes = dst_votes[:, i * 3:(i + 1) * 3]
@@ -306,7 +306,6 @@ class VNet(object):
                         coord[2] + self.params['ModelParams']['SegPatchRadius'][2]
                         ]
             idx += 1
-
         return patches
 
     def knn_search(self, result_feature):
@@ -371,7 +370,6 @@ class VNet(object):
 
         with open(self.params['DataManagerParams']['databasePklSavePath'], 'wb') as f:
             pkl.dump((self.database, self.coordsDB, self.volIdxDB, self.featDB, self.votesDB), f)
-
 
     def load_database(self):
         with open(self.params['DataManagerParams']['databasePklLoadPath'], 'rb') as f:
