@@ -252,9 +252,9 @@ class VNet(object):
         # todo: Knn search via flann or similar
         neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distance = self.knn_search(results_feature)
 
-        dst_votes = np.tile(coords, (0, self.params['DataManagerParams']['numNeighs'])) + votes
+        dst_votes = np.tile(coords, (0, self.params['ModelParams']['numNeighs'])) + votes
 
-        for i in range(0, self.params['DataManagerParams']['numNeighs']):
+        for i in range(0, self.params['ModelParams']['numNeighs']):
             curr_votes = dst_votes[:, i * 3:(i + 1) * 3]
             votemap[curr_votes] += 1.0 / (distance[i] + 1.0)
 
@@ -262,9 +262,9 @@ class VNet(object):
 
         h_seg_patch_size = int(self.params['ModelParams']['SegPatchSize'] / 2)
 
-        for i in range(0, self.params['DataManagerParams']['numNeighs']):
+        for i in range(0, self.params['ModelParams']['numNeighs']):
             curr_votes = dst_votes[:, i * 3:(i + 1) * 3]
-            reject_votes = abs(curr_votes - np.asarray([xc, yc, zc])) < self.params['DataManagerParams']['centrtol']
+            reject_votes = abs(curr_votes - np.asarray([xc, yc, zc])) < self.params['ModelParams']['centrtol']
             w = 1.0 / (distance[i] + 1.0)
 
             curr_dst_coords = coords[reject_votes]

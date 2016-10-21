@@ -29,6 +29,7 @@ params['ModelParams']['patchSize'] = 33
 params['ModelParams']['SamplingStep'] = 8
 params['ModelParams']['featLength'] = 128
 params['ModelParams']['numNeighs'] = 10
+params['ModelParams']['centrtol'] = 5
 
 
 #params of the DataManager
