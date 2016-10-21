@@ -256,9 +256,7 @@ class VNet(object):
         # todo check if the votes are [Nsamples; Nsamples; Nsample ...] or [S1 S1 S1 S1, S2 S2 S2 S2, S3 S3 S3 S3...]
         # todo and if the coords follow the same convention after tiling...
 
-        for i in range(0, self.params['ModelParams']['numNeighs']):
-            curr_votes = dst_votes[:, i * 3:(i + 1) * 3]
-            votemap[curr_votes] += 1.0 / (distance[i] + 1.0)
+        votemap[dst_votes[0], dst_votes[1], dst_votes[2]] += 1.0 / (distance + 1.0)
 
         xc, yc, zc = np.argmax(votemap)
 
