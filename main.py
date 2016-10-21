@@ -36,7 +36,7 @@ params['ModelParams']['SegPatchRadius'] = [7, 7, 7]
 params['DataManagerParams']['dstRes'] = np.asarray([1, 1, 1.5], dtype=float)
 params['DataManagerParams']['VolSize'] = np.asarray([116, 116, 116], dtype=int)
 params['DataManagerParams']['normDir'] = False
-params['DataManagerParams']['databasePklLoadPath'] = None
+params['DataManagerParams']['databasePklLoadPath'] = './database.pkl'
 params['DataManagerParams']['databasePklSavePath'] = './database.pkl'
 
 model=VN.VNet(params)

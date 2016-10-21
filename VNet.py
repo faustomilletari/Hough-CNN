@@ -265,9 +265,10 @@ class VNet(object):
         max_loc = np.argmax(votemap)
         xc, yc, zc = np.unravel_index(max_loc, votemap.shape)
 
-        h_seg_patch_size = int(self.params['ModelParams']['SegPatchSize'] / 2)
+        h_seg_patch_size = self.params['ModelParams']['SegPatchRadius']
 
-        reject_votes = abs(dst_votes - np.asarray([xc, yc, zc])) < self.params['ModelParams']['centrtol']
+        reject_votes = np.sqrt(np.sum((dst_votes - np.asarray([xc, yc, zc]) ** 2), 1)) \
+                       < self.params['ModelParams']['centrtol']
         w = np.ones_like(distance) / (distance + 1.0)
 
         curr_dst_coords = coords[reject_votes]
@@ -301,11 +302,11 @@ class VNet(object):
         idx = 0
         for coord, vol in zip(curr_seg_patch_coords, curr_seg_patch_vol):
             patches[idx] = numpyGT[vol][
-                        coord[0] - self.params['ModelParams']['SegPatchRadius'][0]:
+                        coord[0] - self.params['ModelParams']['SegPatchRadius'][0] - 1:
                         coord[0] + self.params['ModelParams']['SegPatchRadius'][0],
-                        coord[1] - self.params['ModelParams']['SegPatchRadius'][1]:
+                        coord[1] - self.params['ModelParams']['SegPatchRadius'][1] - 1:
                         coord[1] + self.params['ModelParams']['SegPatchRadius'][1],
-                        coord[2] - self.params['ModelParams']['SegPatchRadius'][2]:
+                        coord[2] - self.params['ModelParams']['SegPatchRadius'][2] - 1:
                         coord[2] + self.params['ModelParams']['SegPatchRadius'][2]
                         ]
             idx += 1
