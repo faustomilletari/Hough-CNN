@@ -15,7 +15,7 @@ import scipy
 EPS = 0.0000000001
 
 
-class VNet(object):
+class HoughCNN(object):
     params=None
     dataManagerTrain=None
     dataManagerTest=None
@@ -378,10 +378,6 @@ class VNet(object):
             self.database, self.coordsDB, self.volIdxDB, self.featDB, self.votesDB = pkl.load(f)
 
     def test(self):
-        assert self.params['DataManagerParams']['VolSize'][0] == \
-               self.params['DataManagerParams']['VolSize'][1] == \
-               self.params['DataManagerParams']['VolSize'][2]
-
         self.dataManagerTest = DM.DataManager(self.params['ModelParams']['dirTest'], self.params['ModelParams']['dirResult'], self.params['DataManagerParams'])
         self.dataManagerTest.loadTestData()
 
