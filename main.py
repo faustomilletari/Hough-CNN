@@ -26,10 +26,10 @@ params['ModelParams']['baseLR'] = 0.0001 #the learning rate, initial one
 params['ModelParams']['nProc'] = 8 #the number of threads to do data augmentation
 params['ModelParams']['solver'] = None
 params['ModelParams']['patchSize'] = 33
-params['ModelParams']['SamplingStep'] = 8
+params['ModelParams']['SamplingStep'] = 4
 params['ModelParams']['featLength'] = 128
 params['ModelParams']['numNeighs'] = 10
-params['ModelParams']['centrtol'] = 5
+params['ModelParams']['centrtol'] = 16
 params['ModelParams']['SegPatchRadius'] = [7, 7, 7]
 
 #params of the DataManager

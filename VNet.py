@@ -9,9 +9,11 @@ import cPickle as pkl
 from os.path import splitext
 from multiprocessing import Process, Queue
 from sklearn.neighbors import NearestNeighbors
+import scipy
 
 
 EPS = 0.0000000001
+
 
 class VNet(object):
     params=None
@@ -259,15 +261,22 @@ class VNet(object):
 
         dst_votes = dst_votes.astype(dtype=int)
 
-        votemap[dst_votes[:, 0], dst_votes[:, 1], dst_votes[:, 2]] += np.ones_like(distance) / (distance + 1.0)
+        for v, d in zip(dst_votes, distance):
+            try:
+                votemap[v[0], v[1], v[2]] += 1.0 / (d + 1.0)
+            except IndexError:
+                pass
+        votemap = scipy.ndimage.filters.gaussian_filter(votemap, 6)
 
-        print votemap.shape
         max_loc = np.argmax(votemap)
         xc, yc, zc = np.unravel_index(max_loc, votemap.shape)
+        print xc
+        print yc
+        print zc
 
         h_seg_patch_size = self.params['ModelParams']['SegPatchRadius']
 
-        reject_votes = np.sqrt(np.sum((dst_votes - np.asarray([xc, yc, zc]) ** 2), 1)) \
+        reject_votes = np.sqrt(np.sum((dst_votes - np.asarray([xc, yc, zc])) ** 2, 1)) \
                        < self.params['ModelParams']['centrtol']
         w = np.ones_like(distance) / (distance + 1.0)
 
@@ -282,13 +291,13 @@ class VNet(object):
         #apply patches in appropriate places
 
         for p, c, w in zip(patches, curr_dst_coords, curr_weight):
-            segmentation[c[0] - h_seg_patch_size - 1:c[0] + h_seg_patch_size,
-                         c[1] - h_seg_patch_size - 1:c[1] + h_seg_patch_size,
-                         c[2] - h_seg_patch_size - 1:c[2] + h_seg_patch_size] += p * w
+            segmentation[c[0] - h_seg_patch_size[0] - 1:c[0] + h_seg_patch_size[0],
+                         c[1] - h_seg_patch_size[1] - 1:c[1] + h_seg_patch_size[1],
+                         c[2] - h_seg_patch_size[2] - 1:c[2] + h_seg_patch_size[2]] += p * w
 
-            denominator[c[0] - h_seg_patch_size - 1:c[0] + h_seg_patch_size,
-                        c[1] - h_seg_patch_size - 1:c[1] + h_seg_patch_size,
-                        c[2] - h_seg_patch_size - 1:c[2] + h_seg_patch_size] += w
+            denominator[c[0] - h_seg_patch_size[0] - 1:c[0] + h_seg_patch_size[0],
+                        c[1] - h_seg_patch_size[1] - 1:c[1] + h_seg_patch_size[1],
+                        c[2] - h_seg_patch_size[2] - 1:c[2] + h_seg_patch_size[2]] += w
 
         segmentation /= (denominator+EPS)
 
@@ -301,7 +310,7 @@ class VNet(object):
                   self.params['ModelParams']['SegPatchRadius'][2] * 2 + 1), dtype=np.float32)
         idx = 0
         for coord, vol in zip(curr_seg_patch_coords, curr_seg_patch_vol):
-            patches[idx] = numpyGT[vol][
+            patches[idx] = numpyGT[vol[0]][
                         coord[0] - self.params['ModelParams']['SegPatchRadius'][0] - 1:
                         coord[0] + self.params['ModelParams']['SegPatchRadius'][0],
                         coord[1] - self.params['ModelParams']['SegPatchRadius'][1] - 1:
@@ -314,6 +323,8 @@ class VNet(object):
 
     def knn_search(self, result_feature):
         distances, indices = self.database.kneighbors(result_feature)
+        indices = indices.T
+        distances = distances.T
 
         neighbors_idx = indices.flatten()
         seg_patch_coords = self.coordsDB[neighbors_idx]
@@ -339,26 +350,13 @@ class VNet(object):
             _, _, results_feature, coords = \
                 self.get_class_and_feature_volume(net, volume)
 
-            x = np.linspace(0, 1, annotation.shape[0])
-            y = np.linspace(0, 1, annotation.shape[1])
-            z = np.linspace(0, 1, annotation.shape[2])
-
-            xx, yy, zz = np.meshgrid(x, y, z)
-
-            xx = xx.flatten()
-            yy = yy.flatten()
-            zz = zz.flatten()
-
-            centroid = np.zeros((1, 3), dtype=np.float32)
-            centroid[0, 0] = np.mean(xx * annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0)
-            centroid[0, 1] = np.mean(yy * annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0)
-            centroid[0, 2] = np.mean(zz * annotation[xx.astype(dtype=int), yy.astype(dtype=int), zz.astype(dtype=int)] > 0)
+            centroid = np.reshape(scipy.ndimage.measurements.center_of_mass(annotation), [1, 3])
 
             valid = annotation[coords[:, 0], coords[:, 1], coords[:, 2]] > 0
 
             results_feature = results_feature[valid, :]
             coords = coords[valid, :]
-            votes = centroid - coords
+            votes = coords - centroid
 
             self.featDB = np.vstack((self.featDB, results_feature))
             self.coordsDB = np.vstack((self.coordsDB, coords))
@@ -434,7 +432,7 @@ class VNet(object):
             print('done {}'.format(key))
             results[key] = segmentation
 
-            print("{} foreground voxels".format(np.sum(results[key]>0.5)))
+            print("{} foreground voxels".format(np.sum(results[key] > 0)))
 
             self.dataManagerTest.writeResultsFromNumpyLabel(results[key], key)
 
