@@ -38,6 +38,8 @@ class HoughCNN(object):
         h_patch_size = int(self.params['ModelParams']['patchSize']/2)
         whichImageList = np.random.randint(len(keysIMG), size=int(nr_iter_dataAug/self.params['ModelParams']['nProc']))
         np.random.rand()
+
+        # todo: change in order to pick half/half foreground background
         whichCoordinateList_x = np.random.randint(low=h_patch_size + 2,
                                                   high=self.params['DataManagerParams']['VolSize'][0] - h_patch_size -2,
                                                   size=int(nr_iter_dataAug/self.params['ModelParams']['nProc']))
@@ -251,13 +253,10 @@ class HoughCNN(object):
         results_feature = results_feature[results_label > 0]
         coords = coords[results_label > 0]
 
-        # todo: Knn search via flann or similar
         neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distance = self.knn_search(results_feature)
 
         coords = np.tile(coords, (self.params['ModelParams']['numNeighs'], 1))
         dst_votes = coords + votes
-        # todo check if the votes are [Nsamples; Nsamples; Nsample ...] or [S1 S1 S1 S1, S2 S2 S2 S2, S3 S3 S3 S3...]
-        # todo and if the coords follow the same convention after tiling...
 
         dst_votes = dst_votes.astype(dtype=int)
 
@@ -335,8 +334,6 @@ class HoughCNN(object):
         return neighbors_idx, votes, seg_patch_coords, seg_patch_vol, distances
 
     def create_database(self, net, volumes, annotations):
-        #todo save pkl database file of features and coordinates
-
         self.featDB = np.empty((0, self.params['ModelParams']['featLength']), dtype=np.float32)
         self.coordsDB = np.empty((0, 3), dtype=np.float32)
         self.volIdxDB = np.empty((0, 1), dtype=object)
