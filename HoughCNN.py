@@ -229,7 +229,7 @@ class HoughCNN(object):
             net.blobs['data'].data[...] = imgPatches
 
             out = net.forward()
-            print out.keys()
+
             l = np.argmax(out["pred"], axis=1)
             p = np.max(out["pred"], axis=1)
             f = out["fc2_out"]
@@ -269,13 +269,10 @@ class HoughCNN(object):
                     votemap[v[0], v[1], v[2]] += 1.0 / (d + 1.0)
             except IndexError:
                 pass
-        votemap = scipy.ndimage.filters.gaussian_filter(votemap, 1)
+        votemap = scipy.ndimage.filters.gaussian_filter(votemap, 3)
 
         max_loc = np.argmax(votemap)
         xc, yc, zc = np.unravel_index(max_loc, votemap.shape)
-        print xc
-        print yc
-        print zc
 
         h_seg_patch_size = self.params['ModelParams']['SegPatchRadius']
 

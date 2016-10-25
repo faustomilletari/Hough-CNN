@@ -176,29 +176,29 @@ class DataManager(object):
 
         toWrite = resampler.Execute(toWrite)
 
-        #thfilter=sitk.BinaryThresholdImageFilter()
-        #thfilter.SetInsideValue(1)
-        #thfilter.SetOutsideValue(0)
-        #thfilter.SetLowerThreshold(0.5)
-        #toWrite = thfilter.Execute(toWrite)
+        thfilter=sitk.BinaryThresholdImageFilter()
+        thfilter.SetInsideValue(1)
+        thfilter.SetOutsideValue(0)
+        thfilter.SetLowerThreshold(0.5)
+        toWrite = thfilter.Execute(toWrite)
 
         #connected component analysis (better safe than sorry)
 
-        #cc = sitk.ConnectedComponentImageFilter()
-        #toWritecc = cc.Execute(sitk.Cast(toWrite,sitk.sitkUInt8))
+        cc = sitk.ConnectedComponentImageFilter()
+        toWritecc = cc.Execute(sitk.Cast(toWrite,sitk.sitkUInt8))
 
-        #arrCC=np.transpose(sitk.GetArrayFromImage(toWritecc).astype(dtype=float), [2, 1, 0])
+        arrCC=np.transpose(sitk.GetArrayFromImage(toWritecc).astype(dtype=float), [2, 1, 0])
 
-        #lab=np.zeros(int(np.max(arrCC)+1),dtype=float)
+        lab=np.zeros(int(np.max(arrCC)+1),dtype=float)
 
-        #for i in range(1,int(np.max(arrCC)+1)):
-        #    lab[i]=np.sum(arrCC==i)
+        for i in range(1,int(np.max(arrCC)+1)):
+            lab[i]=np.sum(arrCC==i)
 
-        #activeLab=np.argmax(lab)
+        activeLab=np.argmax(lab)
 
-        #toWrite = (toWritecc==activeLab)
+        toWrite = (toWritecc==activeLab)
 
-        #toWrite = sitk.Cast(toWrite,sitk.sitkUInt8)
+        toWrite = sitk.Cast(toWrite,sitk.sitkUInt8)
 
         writer = sitk.ImageFileWriter()
         filename, ext = splitext(key)
