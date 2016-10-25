@@ -16,9 +16,9 @@ EPS = 0.0000000001
 
 
 class HoughCNN(object):
-    params=None
-    dataManagerTrain=None
-    dataManagerTest=None
+    params = None
+    dataManagerTrain = None
+    dataManagerTest = None
 
     def __init__(self,params):
         self.params=params
@@ -77,7 +77,6 @@ class HoughCNN(object):
                        whichCoordinate[1] - h_patch_size - 1:whichCoordinate[1] + h_patch_size,
                        whichCoordinate[2] - h_patch_size - 1:whichCoordinate[2] + h_patch_size]
 
-
             dataQueue.put(tuple((imgPatch, imgPatchLab)))
 
     def trainThread(self,dataQueue,solver):
@@ -90,6 +89,7 @@ class HoughCNN(object):
                               self.params['ModelParams']['patchSize'],
                               self.params['ModelParams']['patchSize']), dtype=float)
         batchLabel = np.zeros((batchsize, 1), dtype=float)
+        batchweight = np.zeros((batchsize, 1), dtype=float)
 
         train_loss = np.zeros(nr_iter)
         for it in range(nr_iter):
@@ -99,9 +99,12 @@ class HoughCNN(object):
                 batchData[i, 0, :, :, :] = patch.astype(dtype=np.float32)
                 batchLabel[i, 0] = label[h_p, h_p, h_p] > 0.5
 
+            batchweight[batchLabel[:, 0] == 0, 0] = 1.0 / sum((batchLabel[:, 0] == 0).astype(dtype=float))
+            batchweight[batchLabel[:, 0] == 1, 0] = 1.0 / sum((batchLabel[:, 0] == 1).astype(dtype=float))
+
             solver.net.blobs['data'].data[...] = batchData.astype(dtype=np.float32)
             solver.net.blobs['label'].data[...] = batchLabel.astype(dtype=np.float32)
-            solver.net.blobs['weight'].data[...] = np.ones_like(batchLabel, dtype=np.float32)
+            solver.net.blobs['weight'].data[...] = batchweight.astype(dtype=np.float32)
             #use only if you do softmax with loss
 
             solver.step(1)  # this does the training
@@ -262,10 +265,11 @@ class HoughCNN(object):
 
         for v, d in zip(dst_votes, distance):
             try:
-                votemap[v[0], v[1], v[2]] += 1.0 / (d + 1.0)
+                if d <= self.params['ModelParams']['maxDist']:
+                    votemap[v[0], v[1], v[2]] += 1.0 / (d + 1.0)
             except IndexError:
                 pass
-        votemap = scipy.ndimage.filters.gaussian_filter(votemap, 6)
+        votemap = scipy.ndimage.filters.gaussian_filter(votemap, 1)
 
         max_loc = np.argmax(votemap)
         xc, yc, zc = np.unravel_index(max_loc, votemap.shape)
@@ -278,6 +282,7 @@ class HoughCNN(object):
         reject_votes = np.sqrt(np.sum((dst_votes - np.asarray([xc, yc, zc])) ** 2, 1)) \
                        < self.params['ModelParams']['centrtol']
         w = np.ones_like(distance) / (distance + 1.0)
+        w[distance > self.params['ModelParams']['maxDist']] = -1.0
 
         curr_dst_coords = coords[reject_votes]
         curr_seg_patch_coords = seg_patch_coords[reject_votes]
@@ -290,13 +295,18 @@ class HoughCNN(object):
         #apply patches in appropriate places
 
         for p, c, w in zip(patches, curr_dst_coords, curr_weight):
-            segmentation[c[0] - h_seg_patch_size[0] - 1:c[0] + h_seg_patch_size[0],
-                         c[1] - h_seg_patch_size[1] - 1:c[1] + h_seg_patch_size[1],
-                         c[2] - h_seg_patch_size[2] - 1:c[2] + h_seg_patch_size[2]] += p * w
+            if w == -1.0:
+                continue
+            try:
+                segmentation[c[0] - h_seg_patch_size[0] - 1:c[0] + h_seg_patch_size[0],
+                            c[1] - h_seg_patch_size[1] - 1:c[1] + h_seg_patch_size[1],
+                            c[2] - h_seg_patch_size[2] - 1:c[2] + h_seg_patch_size[2]] += p * w
 
-            denominator[c[0] - h_seg_patch_size[0] - 1:c[0] + h_seg_patch_size[0],
-                        c[1] - h_seg_patch_size[1] - 1:c[1] + h_seg_patch_size[1],
-                        c[2] - h_seg_patch_size[2] - 1:c[2] + h_seg_patch_size[2]] += w
+                denominator[c[0] - h_seg_patch_size[0] - 1:c[0] + h_seg_patch_size[0],
+                            c[1] - h_seg_patch_size[1] - 1:c[1] + h_seg_patch_size[1],
+                            c[2] - h_seg_patch_size[2] - 1:c[2] + h_seg_patch_size[2]] += w
+            except ValueError:  # we might want to apply a segpatch where it does not fit. skipping it for now (pass)
+                pass
 
         segmentation /= (denominator+EPS)
 
@@ -309,21 +319,25 @@ class HoughCNN(object):
                   self.params['ModelParams']['SegPatchRadius'][2] * 2 + 1), dtype=np.float32)
         idx = 0
         for coord, vol in zip(curr_seg_patch_coords, curr_seg_patch_vol):
-            patches[idx] = numpyGT[vol[0]][
-                        coord[0] - self.params['ModelParams']['SegPatchRadius'][0] - 1:
-                        coord[0] + self.params['ModelParams']['SegPatchRadius'][0],
-                        coord[1] - self.params['ModelParams']['SegPatchRadius'][1] - 1:
-                        coord[1] + self.params['ModelParams']['SegPatchRadius'][1],
-                        coord[2] - self.params['ModelParams']['SegPatchRadius'][2] - 1:
-                        coord[2] + self.params['ModelParams']['SegPatchRadius'][2]
-                        ]
+            try:
+                patches[idx] = numpyGT[vol[0]][
+                            coord[0] - self.params['ModelParams']['SegPatchRadius'][0] - 1:
+                            coord[0] + self.params['ModelParams']['SegPatchRadius'][0],
+                            coord[1] - self.params['ModelParams']['SegPatchRadius'][1] - 1:
+                            coord[1] + self.params['ModelParams']['SegPatchRadius'][1],
+                            coord[2] - self.params['ModelParams']['SegPatchRadius'][2] - 1:
+                            coord[2] + self.params['ModelParams']['SegPatchRadius'][2]
+                            ]
+            except ValueError:  # trying to read form outside the volume
+                patches[idx] = np.zeros_like(patches[idx - 1])  # not completely safe
+                pass
             idx += 1
         return patches
 
     def knn_search(self, result_feature):
         distances, indices = self.database.kneighbors(result_feature)
-        indices = indices.T
         distances = distances.T
+        indices = indices.T
 
         neighbors_idx = indices.flatten()
         seg_patch_coords = self.coordsDB[neighbors_idx]
@@ -353,7 +367,7 @@ class HoughCNN(object):
 
             results_feature = results_feature[valid, :]
             coords = coords[valid, :]
-            votes = coords - centroid
+            votes = centroid - coords
 
             self.featDB = np.vstack((self.featDB, results_feature))
             self.coordsDB = np.vstack((self.coordsDB, coords))
@@ -373,6 +387,9 @@ class HoughCNN(object):
     def load_database(self):
         with open(self.params['DataManagerParams']['databasePklLoadPath'], 'rb') as f:
             self.database, self.coordsDB, self.volIdxDB, self.featDB, self.votesDB = pkl.load(f)
+        if self.params['DataManagerParams']['rebuildDbase']:
+            self.database = NearestNeighbors(n_neighbors=self.params['ModelParams']['numNeighs'],
+                                            algorithm='brute').fit(self.featDB)
 
     def test(self):
         self.dataManagerTest = DM.DataManager(self.params['ModelParams']['dirTest'], self.params['ModelParams']['dirResult'], self.params['DataManagerParams'])

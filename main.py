@@ -6,8 +6,8 @@ import HoughCNN as HCNN
 basePath=os.getcwd()
 
 params = dict()
-params['DataManagerParams']=dict()
-params['ModelParams']=dict()
+params['DataManagerParams'] = dict()
+params['ModelParams'] = dict()
 
 #params of the algorithm
 params['ModelParams']['numcontrolpoints'] = 2
@@ -15,7 +15,7 @@ params['ModelParams']['sigma'] = 15
 params['ModelParams']['device'] = 0
 params['ModelParams']['prototxtTrain'] = os.path.join(basePath,'Prototxt/train_HCNN_promise2012.prototxt')
 params['ModelParams']['prototxtTest'] = os.path.join(basePath,'Prototxt/test_HCNN_promise2012.prototxt')
-params['ModelParams']['snapshot'] = 500
+params['ModelParams']['snapshot'] = 5000
 params['ModelParams']['dirTrain'] = os.path.join(basePath,'PromiseNormalised/Train')
 params['ModelParams']['dirTest'] = os.path.join(basePath,'PromiseNormalised/Test')
 params['ModelParams']['dirResult'] = os.path.join(basePath,'Results') #where we need to save the results (relative to the base path)
@@ -26,23 +26,25 @@ params['ModelParams']['baseLR'] = 0.0001 #the learning rate, initial one
 params['ModelParams']['nProc'] = 8 #the number of threads to do data augmentation
 params['ModelParams']['solver'] = None
 params['ModelParams']['patchSize'] = 33
-params['ModelParams']['SamplingStep'] = 2
+params['ModelParams']['SamplingStep'] = 4
 params['ModelParams']['featLength'] = 128
 params['ModelParams']['numNeighs'] = 10
+params['ModelParams']['maxDist'] = 2.0
 params['ModelParams']['centrtol'] = 4
-params['ModelParams']['SegPatchRadius'] = [15, 15, 15]
+params['ModelParams']['SegPatchRadius'] = [21, 21, 21]
 
 #params of the DataManager
 params['DataManagerParams']['dstRes'] = np.asarray([1, 1, 1.5], dtype=float)
 params['DataManagerParams']['VolSize'] = np.asarray([128, 128, 64], dtype=int)
 params['DataManagerParams']['VolSize'] = np.asarray([128, 128, 64], dtype=int)
 params['DataManagerParams']['normDir'] = False
-params['DataManagerParams']['databasePklLoadPath'] = None
+params['DataManagerParams']['rebuildDbase'] = True
+params['DataManagerParams']['databasePklLoadPath'] = './database.pkl'
 params['DataManagerParams']['databasePklSavePath'] = './database.pkl'
 
 model=HCNN.HoughCNN(params)
 train = [i for i, j in enumerate(sys.argv) if j == '-train']
-if len(train)>0:
+if len(train) > 0:
     model.train()
 
 test = [i for i, j in enumerate(sys.argv) if j == '-test']
